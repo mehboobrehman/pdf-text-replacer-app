@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PDF Text Replacer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>PDF Text Replacer</h1>
+      <p class="subtitle">Replace text locally in a PDF and save the result.</p>
+    </header>
+
+    <main>
+      <section class="upload-section" id="uploadSection">
+        <div class="drop-zone" id="dropZone">
+          <input type="file" id="fileInput" accept="application/pdf" />
+          <div class="drop-zone-content">
+            <p class="drop-zone-title">Drop a PDF here</p>
+            <p class="drop-zone-subtitle">or click to browse</p>
+            <button class="primary" id="browseButton">Choose File</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="editor-section hidden" id="editorSection">
+        <div class="file-info">
+          <div class="file-info-row">
+            <span class="file-info-label">File</span>
+            <span class="file-info-value" id="fileName">-</span>
+          </div>
+          <div class="file-info-row">
+            <span class="file-info-label">Size</span>
+            <span class="file-info-value" id="fileSize">-</span>
+          </div>
+          <div class="file-info-row">
+            <span class="file-info-label">Path</span>
+            <span class="file-info-value" id="filePath">-</span>
+          </div>
+        </div>
+
+        <div class="form">
+          <label>
+            <span>Search text</span>
+            <input type="text" id="searchText" placeholder="Exact text to replace" />
+          </label>
+          <label>
+            <span>Replace with</span>
+            <input type="text" id="replaceText" placeholder="New text" />
+          </label>
+          <label class="toggle">
+            <span>OCR mode</span>
+            <input type="checkbox" id="ocrMode" />
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button class="secondary" id="previewButton">Preview Text</button>
+          <button class="primary" id="replaceButton">Replace</button>
+          <button class="secondary" id="saveButton" disabled>Save</button>
+          <button class="secondary" id="newFileButton">New PDF</button>
+        </div>
+
+        <div class="preview hidden" id="previewSection">
+          <div class="preview-header">
+            <span class="preview-title" id="previewTitle">PDF Preview</span>
+            <span class="preview-meta" id="previewMeta"></span>
+          </div>
+          <pre class="preview-body" id="previewBody"></pre>
+        </div>
+
+        <div class="status" id="status"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
