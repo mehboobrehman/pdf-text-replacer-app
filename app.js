@@ -22,6 +22,8 @@ const ocrModeInput = document.getElementById('ocrMode');
 let currentUploadPath = null;
 let lastOutputName = null;
 
+const isCapacitor = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PythonBridge;
+
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes)) return '-';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -48,18 +50,39 @@ function setEditorVisible(visible) {
   uploadSection.classList.toggle('hidden', visible);
 }
 
-async function uploadFile(file) {
-  const formData = new FormData();
-  formData.append('file', file, file.name);
-  const response = await fetch('/api/upload', {
-    method: 'POST',
-    body: formData,
+function fileToDataString(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64String = reader.result.split(',')[1];
+      resolve(base64String);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || 'Upload failed');
+}
+
+async function uploadFile(file) {
+  if (isCapacitor) {
+    const base64Data = await fileToDataString(file);
+    const result = await window.Capacitor.Plugins.PythonBridge.uploadPdf({
+      data: base64Data,
+      filename: file.name
+    });
+    return result;
+  } else {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || 'Upload failed');
+    }
+    return response.json();
   }
-  return response.json();
 }
 
 async function loadFile(file) {
@@ -132,19 +155,27 @@ async function replaceText() {
   showStatus('Replacing text...', 'info');
 
   try {
-    const res = await fetch('/api/replace', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    let data;
+    if (isCapacitor) {
+      data = await window.Capacitor.Plugins.PythonBridge.replaceText({
         pdf_path: currentUploadPath,
         search_text: searchText,
         replace_text: replaceTextVal,
-      }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.stderr || data.stdout || ('HTTP ' + res.status));
+      });
+    } else {
+      const res = await fetch('/api/replace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pdf_path: currentUploadPath,
+          search_text: searchText,
+          replace_text: replaceTextVal,
+        }),
+      });
+      data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.stderr || data.stdout || ('HTTP ' + res.status));
+      }
     }
 
     if (data.returncode !== 0) {
@@ -153,7 +184,7 @@ async function replaceText() {
     } else {
       lastOutputName = data.output_name || '';
       saveButton.disabled = !lastOutputName;
-      showStatus('Done. Click Save to choose where to store the output.', 'success');
+      showStatus('Done. Click Save to download or store your edited PDF.', 'success');
     }
   } catch (err) {
     showStatus('Error: ' + err.message, 'error');
@@ -165,6 +196,27 @@ async function replaceText() {
 async function saveOutputWithDialog() {
   if (!lastOutputName) {
     showStatus('Run Replace first so there is a result to save.', 'error');
+    return;
+  }
+
+  if (isCapacitor) {
+    try {
+      const res = await window.Capacitor.Plugins.PythonBridge.getOutputBase64({
+        output_name: lastOutputName
+      });
+      const base64 = res.base64;
+      const blob = b64toBlob(base64, 'application/pdf');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = lastOutputName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showStatus('Saved / Downloaded: ' + lastOutputName, 'success');
+    } catch (err) {
+      showStatus('Save failed: ' + err.message, 'error');
+    }
     return;
   }
 
@@ -208,6 +260,21 @@ async function saveOutputWithDialog() {
   showStatus('Download started: ' + lastOutputName, 'success');
 }
 
+function b64toBlob(b64Data, contentType = '', sliceSize = 512) {
+  const byteCharacters = atob(b64Data);
+  const byteArrays = [];
+  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+    const slice = byteCharacters.slice(offset, offset + sliceSize);
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    byteArrays.push(byteArray);
+  }
+  return new Blob(byteArrays, { type: contentType });
+}
+
 async function previewPdf() {
   if (!currentUploadPath) {
     showStatus('Upload a PDF first.', 'error');
@@ -220,18 +287,29 @@ async function previewPdf() {
   previewTitle.textContent = useOcr ? 'PDF OCR Preview' : 'PDF Preview';
 
   try {
-    const res = await fetch('/api/preview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pdf_path: currentUploadPath, mode: useOcr ? 'ocr' : 'text' }),
-    });
+    let data;
+    if (isCapacitor) {
+      data = await window.Capacitor.Plugins.PythonBridge.previewPdf({
+        pdf_path: currentUploadPath,
+        mode: useOcr ? 'ocr' : 'text'
+      });
+    } else {
+      const res = await fetch('/api/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_path: currentUploadPath, mode: useOcr ? 'ocr' : 'text' }),
+      });
+      data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || ('HTTP ' + res.status));
+      }
+    }
 
-    const data = await res.json();
-    if (!res.ok || (data && data.error)) {
+    if (data && data.error) {
       previewMeta.textContent = '';
-      previewBody.textContent = (data && data.error) ? data.error : ('HTTP ' + res.status);
+      previewBody.textContent = data.error;
       previewSection.classList.remove('hidden');
-      showStatus('Preview failed: ' + ((data && data.error) ? data.error : 'HTTP ' + res.status), 'error');
+      showStatus('Preview failed: ' + data.error, 'error');
       return;
     }
 
